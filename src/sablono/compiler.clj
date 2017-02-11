@@ -44,8 +44,12 @@
        (reduce (fn [attrs [name value]]
                  (assoc attrs name (compile-attr name value) ))
                nil)
-       (html-to-dom-attrs)
-       (to-js)))
+       (html-to-dom-attrs)))
+
+(defn compile-attrs-js
+  "Compile a HTML attribute map into a JSValue."
+  [attrs]
+  (to-js (compile-attrs attrs)))
 
 (defn compile-merge-attrs [attrs-1 attrs-2]
   (let [empty-attrs? #(or (nil? %1) (and (map? %1) (empty? %1)))]
@@ -69,7 +73,7 @@
   (let [[tag attrs content] (normalize/element element)]
     `(~(react-fn tag)
       ~(name tag)
-      ~(compile-attrs attrs)
+      ~(compile-attrs-js attrs)
       ~@(if content (compile-react content)))))
 
 (defn- unevaluated?
@@ -199,14 +203,27 @@
 
 (defmethod compile-element ::all-literal
   [element]
-  (compile-react-element (eval element)))
+  (if (input-element? (first element))
+    (compile-react-element element)
+    (let [[tag attrs children] (normalize/element (eval element))
+          num-children (count children)]
+      (JSValue.
+       {:$$typeof 'sablono.core/react-element-sym
+        :type (name tag)
+        :props
+        (JSValue.
+         (cond-> (or (compile-attrs attrs) {})
+           (= num-children 1)
+           (assoc :children (compile-html (first children)))
+           (> num-children 1)
+           (assoc :children (JSValue. (vec (compile-react children))))))}))))
 
 (defmethod compile-element ::literal-tag-and-attributes
   [[tag attrs & content]]
   (let [[tag attrs _] (normalize/element [tag attrs])]
     `(~(react-fn tag)
       ~(name tag)
-      ~(compile-attrs attrs)
+      ~(compile-attrs-js attrs)
       ~@(map compile-html content))))
 
 (defmethod compile-element ::literal-tag-and-no-attributes
@@ -237,7 +254,7 @@
               ~(name tag)
               (if (map? ~attrs-sym)
                 ~(compile-merge-attrs tag-attrs attrs-sym)
-                ~(compile-attrs tag-attrs))
+                ~(compile-attrs-js tag-attrs))
               (if (map? ~attrs-sym)
                 ~(when-not (empty? content)
                    (mapv compile-html content))

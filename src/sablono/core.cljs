@@ -9,6 +9,16 @@
             [cljsjs.react]
             [cljsjs.react.dom]))
 
+(def react-element-sym
+  "The JavaScript symbol used for React elements."
+  ;; See: https://github.com/facebook/react/blob/master/src/shared/utils/ReactElementSymbol.js
+  (or (and (exists? js/Symbol)
+           (fn? js/Symbol)
+           (fn? (.-for js/Symbol))
+           ;; Lookup the fn to avoid reserved word warning.
+           ((.-for js/Symbol) "react.element"))
+      0xeac7))
+
 (defn wrap-attrs
   "Add an optional attribute argument to a function that returns a element vector."
   [func]
